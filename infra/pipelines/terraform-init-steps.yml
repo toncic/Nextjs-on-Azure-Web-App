@@ -1,0 +1,73 @@
+parameters:
+  terraformBackendLocation: westeurope
+  targetEnv:
+  resourceGroup:
+  serviceConnection:
+  vnetResourceGroup: 
+  vnetName: 
+  subnetName: 
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Check if Terraform backend resources exist'
+    inputs:
+      scriptType: 'bash'
+      azureSubscription: '${{ parameters.serviceConnection }}'
+      scriptLocation: inlineScript
+      inlineScript: |
+        echo "Checking if storage account for $ENV environment exists"
+        az storage account show --name $STORAGE_ACCOUNT --resource-group $RESOURCE_GROUP --query name -o tsv &>/dev/null
+        if [ $? -eq 0 ]; then
+          echo "Storage account $STORAGE_ACCOUNT already exists"
+        else
+          echo "Storage account $STORAGE_ACCOUNT does not exist"
+          echo "##vso[task.setvariable variable=provisionStorageAndState]true"
+        fi
+    env:
+      RESOURCE_GROUP: '${{ parameters.resourceGroup }}'
+      STORAGE_ACCOUNT: 'demonextjswebapp${{ parameters.targetEnv }}tfstate'
+      CONTAINER: 'tf-${{ parameters.targetEnv }}-state'
+      LOCATION: '${{ parameters.terraformBackendLocation }}'
+      ENV: '${{ parameters.targetEnv }}'
+
+  # To manage terraform state, an Azure storage account & container need to be created that will contain the state file.
+  - task: AzureCLI@2
+    displayName: 'Create Terraform backend resources to manage state'
+    condition: and(succeeded(), eq(variables.provisionStorageAndState, 'true'))
+    inputs:
+      scriptType: 'bash'
+      azureSubscription: '${{ parameters.serviceConnection }}'
+      scriptLocation: inlineScript
+      inlineScript: |
+        # Create resources to manage terraform state
+          echo "Creating storage account for $ENV environment"
+          az storage account create \
+            --name $STORAGE_ACCOUNT \
+            --resource-group $RESOURCE_GROUP \
+            --location $LOCATION \
+            --sku Standard_ZRS \
+            --kind StorageV2 \
+            --https-only true \
+            --allow-blob-public-access false
+          az storage container create \
+            --name $CONTAINER \
+            --account-name $STORAGE_ACCOUNT \
+            --auth-mode login
+        echo "Enable soft delete for containers in storage account $STORAGE_ACCOUNT"
+        az storage account blob-service-properties update \
+          --enable-container-delete-retention true \
+          --container-delete-retention-days 7 \
+          -n $STORAGE_ACCOUNT \
+          -g $RESOURCE_GROUP
+        echo "Enable soft delete for blobs in storage account $STORAGE_ACCOUNT"
+        az storage account blob-service-properties update \
+          --enable-delete-retention true \
+          --delete-retention-days 7 \
+          -n $STORAGE_ACCOUNT \
+          -g $RESOURCE_GROUP
+    env:
+      RESOURCE_GROUP: '${{ parameters.resourceGroup }}'
+      STORAGE_ACCOUNT: 'demonextjswebapp${{ parameters.targetEnv }}tfstate'
+      CONTAINER: 'tf-${{ parameters.targetEnv }}-state'
+      LOCATION: '${{ parameters.terraformBackendLocation }}'
+      ENV: '${{ parameters.targetEnv }}'

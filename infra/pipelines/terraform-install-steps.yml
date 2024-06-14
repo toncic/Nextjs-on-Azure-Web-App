@@ -1,0 +1,22 @@
+parameters:
+  terraformVersion: 1.4.5
+  targetEnv:
+  resourceGroup:
+  serviceConnection:
+
+steps:
+  - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@0
+    displayName: 'Install Terraform ${{ parameters.terraformVersion }}'
+    inputs:
+      terraformVersion: '${{ parameters.terraformVersion }}'
+
+  - task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV2@2
+    displayName: 'Terraform install (init)'
+    inputs:
+      workingDirectory: '$(System.DefaultWorkingDirectory)/infra/terraform/envs/${{ parameters.targetEnv }}'
+      backendServiceArm: '${{ parameters.serviceConnection }}'
+      backendAzureRmResourceGroupName: '${{ parameters.resourceGroup }}'
+      backendAzureRmStorageAccountName: 'demonextjswebapp${{ parameters.targetEnv }}tfstate'
+      backendAzureRmContainerName: 'tf-${{ parameters.targetEnv }}-state'
+      backendAzureRmKey: '${{ parameters.targetEnv }}.terraform.tfstate'
+      commandOptions: '-upgrade'

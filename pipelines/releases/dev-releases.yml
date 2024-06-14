@@ -1,0 +1,25 @@
+  trigger:
+  - dev
+
+variables:
+  CI: true
+
+stages:
+  - stage: BuildDevEnv
+    displayName: 'Build Next.js application'
+    jobs:
+      - template: ../dynamic/build-dynamic-site.yml
+        parameters:
+          targetEnv: 'dev'
+          serviceConnection: 'ServConn-rg-SuRe-dev-euw'
+
+  - stage: DeployDevEnv
+    displayName: 'Deploy Application to Azure Web Apps'
+    dependsOn: BuildDevEnv
+    condition: and(eq(variables['build.sourceBranch'], 'refs/heads/dev'),succeeded('BuildDevEnv'))
+    jobs:
+      - template: ../dynamic/deploy-dynamic-site.yml
+        parameters:
+          targetEnv: 'dev'
+          appName: 'global'
+          serviceConnection: 'ServConn-rg-SuRe-dev-euw'

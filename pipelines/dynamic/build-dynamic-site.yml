@@ -1,0 +1,76 @@
+parameters:
+  - name: targetEnv
+  - name: serviceConnection
+
+jobs:
+  - job: runBuild
+    displayName: 'Run build'
+    variables:
+      - name: NEXT_TELEMETRY_DISABLED
+        value: '1'
+    steps:
+      - task: AzureKeyVault@2
+        displayName: 'Get secrets from Azure Key Vault'
+        inputs:
+          azureSubscription: '${{ parameters.serviceConnection }}'
+          KeyVaultName: 'neste-sure-kvault-${{ parameters.targetEnv }}'
+          SecretsFilter: '*'
+
+      - task: Cache@2
+        inputs:
+          key: 'v4 | yarn | $(Agent.OS) | yarn.lock'
+          restoreKeys: |
+            v4 | yarn | $(Agent.OS)
+            v4 | yarn
+          path: '.yarn/cache'
+        displayName: Cache Yarn cache
+
+      - task: Cache@2
+        inputs:
+          key: 'next | $(Agent.OS) | yarn.lock'
+          restoreKeys: |
+            next | $(Agent.OS)
+            next
+          path: '.next/cache'
+        displayName: Cache .next/cache
+
+      - task: NodeTool@0
+        displayName: 'Install Node.js'
+        inputs:
+          versionSpec: '18.x'
+
+      - script: corepack enable
+        displayName: 'Enable Corepack'
+
+      - script: yarn install --immutable
+        displayName: 'Install dependencies'
+
+      - script: yarn build
+        displayName: 'Build Next.js application'
+        env:
+          # env variables
+
+      - script: cp -r .next/static .next/standalone/.next
+        displayName: 'Copy static to .next/standalone./.next'
+
+      - script: cp -r public .next/standalone/
+        displayName: 'Copy /public to .next/standalone'  
+
+      - script: yarn test:ci
+        displayName: 'Run tests'
+
+      - task: ArchiveFiles@2
+        displayName: 'Create artifact'
+        inputs:
+          rootFolderOrFile: '.next/standalone'
+          includeRootFolder: false
+          archiveType: 'zip'
+          archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId)-${{ parameters.targetEnv }}.zip
+          replaceExistingArchive: true
+
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish artifact'
+        inputs:
+          targetPath: $(Build.ArtifactStagingDirectory)/$(Build.BuildId)-${{ parameters.targetEnv }}.zip
+          artifact: 'demo-nextjs-webapp-${{ parameters.targetEnv }}'
+          publishLocation: 'pipeline'
