@@ -1,0 +1,34 @@
+parameters:
+  - name: targetEnv
+  - name: resourceGroup
+  - name: serviceConnection
+
+jobs:
+  - deployment: Deploy
+    displayName: 'Terraform Deploy to ${{ parameters.targetEnv }}'
+    environment: '${{ parameters.targetEnv }}'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - template: ./terraform-install-steps.yml
+              parameters:
+                targetEnv: '${{ parameters.targetEnv }}'
+                resourceGroup: '${{ parameters.resourceGroup }}'
+                serviceConnection: '${{ parameters.serviceConnection }}'
+
+            - task: DownloadPipelineArtifact@2
+              inputs:
+                artifactName: '${{ parameters.targetEnv }}-terraform-plan'
+                targetPath: '$(System.DefaultWorkingDirectory)/infra/terraform/envs/${{ parameters.targetEnv }}/planreview.tfplan'
+
+            - task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV2@2
+              displayName: 'Terraform apply'
+              inputs:
+                command: apply
+                commandOptions: '-var-file="./${{ parameters.targetEnv }}.tfvars" -auto-approve -input=false'
+                workingDirectory: '$(System.DefaultWorkingDirectory)/infra/terraform/envs/${{ parameters.targetEnv }}'
+                plan: '$(System.DefaultWorkingDirectory)/infra/terraform/envs/${{ parameters.targetEnv }}/planreview.tfplan'
+                environmentServiceNameAzureRM: '${{ parameters.serviceConnection }}'

@@ -1,0 +1,41 @@
+parameters:
+  - name: targetEnv
+  - name: resourceGroup
+  - name: serviceConnection
+
+jobs:
+  - job: Plan
+    displayName: 'Terraform Plan Review to ${{ parameters.targetEnv }}'
+    steps:
+      - checkout: self
+      - template: ./terraform-init-steps.yml
+        parameters:
+          targetEnv: '${{ parameters.targetEnv }}'
+          resourceGroup: '${{ parameters.resourceGroup }}'
+          serviceConnection: '${{ parameters.serviceConnection }}'
+
+      - template: ./terraform-install-steps.yml
+        parameters:
+          targetEnv: '${{ parameters.targetEnv }}'
+          resourceGroup: '${{ parameters.resourceGroup }}'
+          serviceConnection: '${{ parameters.serviceConnection }}'
+
+      - task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV2@2
+        displayName: 'Terraform validate'
+        inputs:
+          command: validate
+          workingDirectory: '$(System.DefaultWorkingDirectory)/infra/terraform/envs/${{ parameters.targetEnv }}'
+
+      - task: ms-devlabs.custom-terraform-tasks.custom-terraform-release-task.TerraformTaskV2@2
+        name: terraformPlan
+        displayName: 'Terraform plan'
+        inputs:
+          command: plan
+          workingDirectory: '$(System.DefaultWorkingDirectory)/infra/terraform/envs/${{ parameters.targetEnv }}'
+          commandOptions: '-var-file="./${{ parameters.targetEnv }}.tfvars" --out=$(System.DefaultWorkingDirectory)/infra/terraform/envs/${{ parameters.targetEnv }}/${{ parameters.targetEnv }}-out.tfplan'
+          environmentServiceNameAzureRM: '${{ parameters.serviceConnection }}'
+
+      - task: PublishPipelineArtifact@1
+        inputs:
+          artifact: '${{ parameters.targetEnv }}-terraform-plan'
+          targetPath: '$(System.DefaultWorkingDirectory)/infra/terraform/envs/${{ parameters.targetEnv }}/${{ parameters.targetEnv }}-out.tfplan'

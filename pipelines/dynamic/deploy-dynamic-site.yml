@@ -1,0 +1,28 @@
+parameters:
+  - name: targetEnv
+  - name: appName
+  - name: serviceConnection
+
+jobs:
+  - deployment: Deploy
+    displayName: 'Deploy to ${{ parameters.targetEnv }}'
+    environment: '${{ parameters.targetEnv }}'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - task: DownloadPipelineArtifact@2
+              displayName: 'Download website build artifact'
+              inputs:
+                artifactName: 'demo-nextjs-webapp-${{ parameters.targetEnv }}'
+                targetPath: '$(System.DefaultWorkingDirectory)'
+
+            - task: AzureWebApp@1
+              displayName: 'Deploy Application to Azure Web App'
+              inputs:
+                azureSubscription: '${{ parameters.serviceConnection }}'
+                appName: 'demo-nextjs-webapp-appsvc-${{ parameters.targetEnv }}-${{ parameters.appName }}'
+                appType: 'webAppLinux'
+                package: '$(System.DefaultWorkingDirectory)/$(Build.BuildId)-${{ parameters.targetEnv }}.zip'
+                startUpCommand: 'yarn run start:azure'
+                deploymentMethod: 'zipDeploy'
